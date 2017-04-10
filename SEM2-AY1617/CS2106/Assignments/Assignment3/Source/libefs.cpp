@@ -10,6 +10,8 @@ TOpenFile *_oft;
 // Open file table counter
 int _oftCount=0;
 
+TDirectory *directory;
+
 // Mounts a paritition given in fsPartitionName. Must be called before all
 // other functions
 void initFS(const char *fsPartitionName, const char *fsPassword)
@@ -18,6 +20,7 @@ void initFS(const char *fsPartitionName, const char *fsPassword)
     _fs = getFSInfo();
     _oft = (TOpenFile *) calloc(sizeof(TOpenFile), _fs->maxFiles);
     _oftCount = 0;
+    directory = (TDirectory *)_fs + _fs->dirByteIndex;
 }
 
 int createOpenFileEntry(int mode, unsigned int inode, unsigned long len) {
@@ -56,8 +59,12 @@ int openFile(const char *filename, unsigned char mode)
 				return createOpenFileEntry(mode, i, getFileLength(filename));
             } else {
 				i = makeDirectoryEntry(filename, 0x80, 0);
-				updateDirectory();
-				return createOpenFileEntry(mode, i, 0); 
+				if(_result == FS_DIR_FULL || _result == FS_DIR_FULL) {
+					return -1;
+				} else {
+					updateDirectory();
+					return createOpenFileEntry(mode, i, 0); 
+				}
             }
             break;
         case MODE_READ_ONLY:
@@ -108,7 +115,7 @@ void writeFile(int fp, void *buffer, unsigned int dataSize, unsigned int dataCou
 			writeBlock(f.buffer, blockNumber);
 		}
 	}
-	//~ updateDirectoryFileLength(f.filePtr);
+	updateDirectoryFileLength(directory[f.inode].filename, f.filePtr);
 }
 
 // Flush the file data to the disk. Writes all data buffers, updates directory,
@@ -124,9 +131,9 @@ void flushFile(int fp)
 		memset(f.buffer + f.writePtr, 0, f.blockSize - f.writePtr);
 		writeBlock(f.buffer, returnBlockNumFromInode(f.inodeBuffer, f.filePtr));
 	}    
-	saveInode(f.inodeBuffer, f.inode);
-	updateFreeList();
     updateDirectory();
+	updateFreeList();
+	saveInode(f.inodeBuffer, f.inode);
 }
 
 // Read data from the file.
@@ -197,11 +204,21 @@ void closeFS() {
 		closeFile(i);
 	}
     unmountFS();
-    free(_fs);
     free(_oft);
 }
 
 int main() {
+	initFS("part.dsk", "cs2106");
+	int a = openFile("hehe.txt", MODE_NORMAL);
+	printf("a: %d\n",a);
+	int b = openFile("hehe.txt", MODE_CREATE);
+	printf("b: %d\n",b);
+	char * content = "test heloo word";
+	char * readed = (char *)calloc(sizeof(char), 100);
+	writeFile(a, content, strlen(content), 0);
+	readFile(a, (void *)readed, strlen(content), 0);
+	printf("readed: %s\n", readed);
+	closeFS();
 	return 0;
 }
 
