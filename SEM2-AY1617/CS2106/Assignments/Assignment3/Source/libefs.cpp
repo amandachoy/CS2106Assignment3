@@ -37,7 +37,7 @@ int openFile(const char *filename, unsigned char mode)
     */
     int i;
     switch (mode) {
-        case 0:
+        case MODE_NORMAL:
             i = open(filename, O_RDWR);
             if (_result != FS_FILE_NOT_FOUND && i >= 0) {
                 _oftCount++;
@@ -45,7 +45,7 @@ int openFile(const char *filename, unsigned char mode)
                 return -1;
             }
             break;
-        case 1:
+        case MODE_CREATE:
             i = open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
             if (i >= 0) {
                 unsigned long freeBlock = findFreeBlock();
@@ -59,14 +59,14 @@ int openFile(const char *filename, unsigned char mode)
                 return -1;
             }
             break;
-        case 2:
+        case MODE_READ_ONLY:
             i = open(filename, O_RDONLY);
             if (_result != FS_FILE_NOT_FOUND && i >= 0) {
                 _oftCount++;
             } else {
                 return -1;
             }
-        case 3:
+        case MODE_READ_APPEND:
             i = open(filename, O_RDWR | O_APPEND);
             if (_result != FS_FILE_NOT_FOUND && i >= 0) {
                 _oftCount++;
