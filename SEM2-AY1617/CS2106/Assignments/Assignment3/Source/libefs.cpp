@@ -2,7 +2,7 @@
 #include <fcntl.h>
 
 // FS Descriptor
-TFileSystemStruct *_fs = getFSInfo();
+TFileSystemStruct *_fs;
 
 // Open File Table
 TOpenFile *_oft;
@@ -15,6 +15,7 @@ int _oftCount=0;
 void initFS(const char *fsPartitionName, const char *fsPassword)
 {
     mountFS(fsPartitionName, fsPassword);
+    *_fs = getFSInfo();
 }
 
 // Opens a file in the partition. Depending on mode, a new file may be created
