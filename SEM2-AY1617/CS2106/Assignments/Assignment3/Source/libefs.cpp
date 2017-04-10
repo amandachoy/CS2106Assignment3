@@ -19,6 +19,21 @@ void initFS(const char *fsPartitionName, const char *fsPassword)
     _oft = (TOpenFile *) calloc(sizeof(TOpenFile), _fs->maxFiles);
 }
 
+int createOpenFileEntry(int mode, unsigned inode, unsigned long len) {
+	_oft[_oftCount].openMode = mode;
+	_oft[_oftCount].blockSize = _fs->blockSize;
+	_oft[_oftCount].inode = inode;
+	unsigned long* inodeBuffer = makeInodeBuffer();
+	loadInode(inodeBuffer, inode);
+	_oft[_oftCount].inodeBuffer = inodeBuffer;
+	_oft[_oftCount].buffer = makeDataBuffer();
+	_oft[_oftCount].writePtr = 0;
+	_oft[_oftCount].readPtr = 0;
+	_oft[_oftCount].filePtr = (mode == MODE_READ_APPEND ? len : 0);
+	_oftCount++;
+	return _oftCount - 1;
+}
+
 // Opens a file in the partition. Depending on mode, a new file may be created
 // if it doesn't exist, or we may get FS_FILE_NOT_FOUND in _result. See the enum above for valid modes.
 // Return -1 if file open fails for some reason. E.g. file not found when mode is MODE_NORMAL, or
@@ -26,91 +41,34 @@ void initFS(const char *fsPartitionName, const char *fsPassword)
 
 int openFile(const char *filename, unsigned char mode)
 {
-    unsigned long* inodeBuffer;
-
-    int i = findFile(filename);
+    unsigned int i = findFile(filename);
     switch (mode) {
         case MODE_NORMAL:
             if (_result == FS_OK) {
-				_oft[_oftCount].openMode = mode;
-				_oft[_oftCount].blockSize = _fs->blockSize;
-				_oft[_oftCount].inode = i;
-				inodeBuffer = makeInodeBuffer();
-				loadInode(inodeBuffer, i);
-				_oft[_oftCount].inodeBuffer = inodeBuffer;
-				_oft[_oftCount].buffer = makeDataBuffer();
-				_oft[_oftCount].writePtr = 0;
-				_oft[_oftCount].readPtr = 0;
-				_oft[_oftCount].filePtr = 0;
-                _oftCount++;
-                return _oftCount - 1;
+				return createOpenFileEntry(mode, i, getFileLength(filename));
             } else {
                 return -1;
             }
             break;
         case MODE_CREATE:
             if (_result == FS_OK) {
-				_oft[_oftCount].openMode = mode;
-				_oft[_oftCount].blockSize = _fs->blockSize;
-				_oft[_oftCount].inode = i;
-				inodeBuffer = makeInodeBuffer();
-				loadInode(inodeBuffer, i);
-				_oft[_oftCount].inodeBuffer = inodeBuffer;
-				_oft[_oftCount].buffer = makeDataBuffer();
-				_oft[_oftCount].writePtr = 0;
-				_oft[_oftCount].readPtr = 0;
-				_oft[_oftCount].filePtr = 0;
-                _oftCount++;
-                return _oftCount - 1;
+				return createOpenFileEntry(mode, i, getFileLength(filename));
             } else {
 				i = makeDirectoryEntry(filename, 0x80, 0);
-				_oft[_oftCount].openMode = mode;
-				_oft[_oftCount].blockSize = _fs->blockSize;
-				_oft[_oftCount].inode = i;
-				inodeBuffer = makeInodeBuffer();
-				loadInode(inodeBuffer, i);
-				_oft[_oftCount].inodeBuffer = inodeBuffer;
-				_oft[_oftCount].buffer = makeDataBuffer();
-				_oft[_oftCount].writePtr = 0;
-				_oft[_oftCount].readPtr = 0;
-				_oft[_oftCount].filePtr = 0;
-                _oftCount++;
-                updateDirectory();
-                return -1;
+				updateDirectory();
+				return createOpenFileEntry(mode, i, 0); 
             }
             break;
         case MODE_READ_ONLY:
             if (_result == FS_OK) {
-				_oft[_oftCount].openMode = mode;
-				_oft[_oftCount].blockSize = _fs->blockSize;
-				_oft[_oftCount].inode = i;
-				inodeBuffer = makeInodeBuffer();
-				loadInode(inodeBuffer, i);
-				_oft[_oftCount].inodeBuffer = inodeBuffer;
-				_oft[_oftCount].buffer = makeDataBuffer();
-				_oft[_oftCount].writePtr = 0;
-				_oft[_oftCount].readPtr = 0;
-				_oft[_oftCount].filePtr = 0;
-                _oftCount++;
-                return _oftCount - 1;
+				return createOpenFileEntry(mode, i, getFileLength(filename));
             } else {
                 return -1;
             }
             break;
         case MODE_READ_APPEND:
             if (_result == FS_OK) {
-				_oft[_oftCount].openMode = mode;
-				_oft[_oftCount].blockSize = _fs->blockSize;
-				_oft[_oftCount].inode = i;
-				inodeBuffer = makeInodeBuffer();
-				loadInode(inodeBuffer, i);
-				_oft[_oftCount].inodeBuffer = inodeBuffer;
-				_oft[_oftCount].buffer = makeDataBuffer();
-				_oft[_oftCount].writePtr = 0;
-				_oft[_oftCount].readPtr = 0;
-				_oft[_oftCount].filePtr = getFileLength(filename);
-                _oftCount++;
-                return _oftCount - 1;
+				return createOpenFileEntry(mode, i, getFileLength(filename));
             } else {
                 return -1;
             }
