@@ -15,7 +15,7 @@ int _oftCount=0;
 void initFS(const char *fsPartitionName, const char *fsPassword)
 {
     mountFS(fsPartitionName, fsPassword);
-    *_fs = getFSInfo();
+    _fs = getFSInfo();
 }
 
 // Opens a file in the partition. Depending on mode, a new file may be created
