@@ -10,7 +10,7 @@ TOpenFile *_oft;
 // Open file table counter
 int _oftCount=0;
 
-TDirectory *directory;
+const char *filenames [100];
 
 // Mounts a paritition given in fsPartitionName. Must be called before all
 // other functions
@@ -20,10 +20,9 @@ void initFS(const char *fsPartitionName, const char *fsPassword)
     _fs = getFSInfo();
     _oft = (TOpenFile *) calloc(sizeof(TOpenFile), _fs->maxFiles);
     _oftCount = 0;
-    directory = (TDirectory *)_fs + _fs->dirByteIndex;
 }
 
-int createOpenFileEntry(int mode, unsigned int inode, unsigned long len) {
+int createOpenFileEntry(const char *filename, int mode, unsigned int inode, unsigned long len) {
 	_oft[_oftCount].openMode = mode;
 	_oft[_oftCount].blockSize = _fs->blockSize;
 	_oft[_oftCount].inode = inode;
@@ -34,6 +33,8 @@ int createOpenFileEntry(int mode, unsigned int inode, unsigned long len) {
 	_oft[_oftCount].writePtr = (mode == MODE_READ_APPEND ? (len % _fs->blockSize) : 0);
 	_oft[_oftCount].readPtr = 0;
 	_oft[_oftCount].filePtr = (mode == MODE_READ_APPEND ? len : 0);
+	filenames[_oftCount] = filename;
+	//~ printf("lol %d\n",_oft[_oftCount].filePtr);
 	_oftCount++;
 	return _oftCount - 1;
 }
@@ -49,34 +50,36 @@ int openFile(const char *filename, unsigned char mode)
     switch (mode) {
         case MODE_NORMAL:
             if (_result == FS_OK) {
-				return createOpenFileEntry(mode, i, getFileLength(filename));
+				return createOpenFileEntry(filename, mode, i, getFileLength(filename));
             } else {
                 return -1;
             }
             break;
         case MODE_CREATE:
             if (_result == FS_OK) {
-				return createOpenFileEntry(mode, i, getFileLength(filename));
+				return createOpenFileEntry(filename, mode, i, getFileLength(filename));
             } else {
 				i = makeDirectoryEntry(filename, 0x80, 0);
 				if(_result == FS_DIR_FULL || _result == FS_DIR_FULL) {
 					return -1;
 				} else {
 					updateDirectory();
-					return createOpenFileEntry(mode, i, 0); 
+					return createOpenFileEntry(filename, mode, i, 0); 
 				}
             }
             break;
         case MODE_READ_ONLY:
             if (_result == FS_OK) {
-				return createOpenFileEntry(mode, i, getFileLength(filename));
+				return createOpenFileEntry(filename, mode, i, getFileLength(filename));
             } else {
                 return -1;
             }
             break;
         case MODE_READ_APPEND:
             if (_result == FS_OK) {
-				return createOpenFileEntry(mode, i, getFileLength(filename));
+				int fp = createOpenFileEntry(filename, mode, i, getFileLength(filename));
+				readBlock(_oft[fp].buffer, returnBlockNumFromInode(_oft[fp].inodeBuffer, _oft[fp].filePtr));
+				return fp;
             } else {
                 return -1;
             }
@@ -100,14 +103,16 @@ void writeFile(int fp, void *buffer, unsigned int dataSize, unsigned int dataCou
 	
 	while(remaining > 0) {
 		blockNumber = returnBlockNumFromInode(f.inodeBuffer, f.filePtr);
+
 		if(blockNumber == 0){
 			blockNumber = findFreeBlock();
 			markBlockBusy(blockNumber);
 			setBlockNumInInode(f.inodeBuffer, f.filePtr, blockNumber);
 		}
+
 		lenToWriteIntoThisBlock = f.blockSize - f.writePtr < remaining ?
 								  (f.blockSize - f.writePtr) : remaining;
-		strncpy(f.buffer, (char *)buffer+(dataSize-remaining), lenToWriteIntoThisBlock);
+		strncpy(f.buffer + f.writePtr, (char *)buffer+(dataSize-remaining), lenToWriteIntoThisBlock);
 		f.filePtr = f.filePtr + lenToWriteIntoThisBlock;
 		f.writePtr = (f.writePtr + lenToWriteIntoThisBlock) % f.blockSize;
 		remaining -= lenToWriteIntoThisBlock;
@@ -115,7 +120,8 @@ void writeFile(int fp, void *buffer, unsigned int dataSize, unsigned int dataCou
 			writeBlock(f.buffer, blockNumber);
 		}
 	}
-	updateDirectoryFileLength(directory[f.inode].filename, f.filePtr);
+	updateDirectoryFileLength(filenames[fp], f.filePtr);
+	_oft[fp] = f;
 }
 
 // Flush the file data to the disk. Writes all data buffers, updates directory,
@@ -127,6 +133,7 @@ void flushFile(int fp)
     if (f.openMode == MODE_READ_ONLY) {
         return;
     }
+
 	if(f.writePtr != 0) {
 		memset(f.buffer + f.writePtr, 0, f.blockSize - f.writePtr);
 		writeBlock(f.buffer, returnBlockNumFromInode(f.inodeBuffer, f.filePtr));
@@ -151,10 +158,13 @@ void readFile(int fp, void *buffer, unsigned int dataSize, unsigned int dataCoun
 		blockNumber = returnBlockNumFromInode(f.inodeBuffer, f.filePtr);
 		if(blockNumber == 0){
 			memset((char *)buffer + (dataSize - remaining), 0, f.blockSize);
+		}else{
+			readBlock(f.buffer, blockNumber);
 		}
 		lenToReadFromThisBlock = f.blockSize - f.readPtr < remaining ?
 								  (f.blockSize - f.readPtr) : remaining;
 		strncpy((char *)buffer+(dataSize-remaining), f.buffer, lenToReadFromThisBlock);
+
 		f.filePtr = f.filePtr + lenToReadFromThisBlock;
 		f.readPtr = (f.readPtr + lenToReadFromThisBlock) % f.blockSize;
 		remaining -= lenToReadFromThisBlock;
@@ -193,8 +203,6 @@ void delFile(const char *filename) {
 // Close a file. Flushes all data buffers, updates inode, directory, etc.
 void closeFile(int fp) {
 	flushFile(fp);
-    free(_oft[fp].buffer);
-    free(_oft[fp].inodeBuffer);
 }
 
 
@@ -209,15 +217,23 @@ void closeFS() {
 
 int main() {
 	initFS("part.dsk", "cs2106");
-	int a = openFile("hehe.txt", MODE_NORMAL);
+	int a = openFile("hehe.txt", MODE_READ_APPEND);
 	printf("a: %d\n",a);
-	int b = openFile("hehe.txt", MODE_CREATE);
-	printf("b: %d\n",b);
-	char * content = "test heloo word";
-	char * readed = (char *)calloc(sizeof(char), 100);
+	//~ int b = openFile("hehe1.txt", MODE_CREATE);
+	//~ printf("b: %d\n",b);
+	char * content = "test heloo word!!!";
 	writeFile(a, content, strlen(content), 0);
-	readFile(a, (void *)readed, strlen(content), 0);
+
+	flushFile(a);
+	closeFile(a);
+	
+	char * readed = (char *)calloc(sizeof(char), 100);
+	a = openFile("hehe.txt", MODE_NORMAL);
+	readFile(a, (void *)readed, strlen(content)*3, 0);
+	printf("readed: %s\n", readed+19);
 	printf("readed: %s\n", readed);
+	printf("readed: %s\n", readed+38);
+
 	closeFS();
 	return 0;
 }
