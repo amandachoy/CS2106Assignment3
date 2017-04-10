@@ -16,6 +16,7 @@ void initFS(const char *fsPartitionName, const char *fsPassword)
 {
     mountFS(fsPartitionName, fsPassword);
     _fs = getFSInfo();
+    _oft = (TOpenFile *) calloc(sizeof(TOpenFile), _fs->maxFiles);
 }
 
 // Opens a file in the partition. Depending on mode, a new file may be created
@@ -25,69 +26,105 @@ void initFS(const char *fsPartitionName, const char *fsPassword)
 
 int openFile(const char *filename, unsigned char mode)
 {
-    
-    char* dataBuffer = makeDataBuffer();
-    unsigned long* inodeBuffer = makeInodeBuffer();
- /*
-    _oft->openMode = mode;
-    _oft->blockSize = _fs->blockSize;
-    _oft->inode = index;
-    _oft->inodeBuffer = inodeBuffer;
-    _oft->buffer = dataBuffer;
-    */
-    int i;
+    unsigned long* inodeBuffer;
+
+    int i = findFile(filename);
     switch (mode) {
         case MODE_NORMAL:
-            i = open(filename, O_RDWR);
-            if (_result != FS_FILE_NOT_FOUND && i >= 0) {
+            if (_result == FS_OK) {
+				_oft[_oftCount].openMode = mode;
+				_oft[_oftCount].blockSize = _fs->blockSize;
+				_oft[_oftCount].inode = i;
+				inodeBuffer = makeInodeBuffer();
+				loadInode(inodeBuffer, i);
+				_oft[_oftCount].inodeBuffer = inodeBuffer;
+				_oft[_oftCount].buffer = makeDataBuffer();
+				_oft[_oftCount].writePtr = 0;
+				_oft[_oftCount].readPtr = 0;
+				_oft[_oftCount].filePtr = 0;
                 _oftCount++;
+                return _oftCount - 1;
             } else {
                 return -1;
             }
             break;
         case MODE_CREATE:
-            i = open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-            if (i >= 0) {
-                unsigned long freeBlock = findFreeBlock();
-                markBlockBusy(freeBlock);
-                inodeBuffer[0] = freeBlock;
-                setBlockNumInInode(inodeBuffer, 0, freeBlock);
-                updateFreeList();
-                makeDirectoryEntry(filename, 0x0, getFileLength(filename));
+            if (_result == FS_OK) {
+				_oft[_oftCount].openMode = mode;
+				_oft[_oftCount].blockSize = _fs->blockSize;
+				_oft[_oftCount].inode = i;
+				inodeBuffer = makeInodeBuffer();
+				loadInode(inodeBuffer, i);
+				_oft[_oftCount].inodeBuffer = inodeBuffer;
+				_oft[_oftCount].buffer = makeDataBuffer();
+				_oft[_oftCount].writePtr = 0;
+				_oft[_oftCount].readPtr = 0;
+				_oft[_oftCount].filePtr = 0;
                 _oftCount++;
+                return _oftCount - 1;
             } else {
+				i = makeDirectoryEntry(filename, 0x80, 0);
+				_oft[_oftCount].openMode = mode;
+				_oft[_oftCount].blockSize = _fs->blockSize;
+				_oft[_oftCount].inode = i;
+				inodeBuffer = makeInodeBuffer();
+				loadInode(inodeBuffer, i);
+				_oft[_oftCount].inodeBuffer = inodeBuffer;
+				_oft[_oftCount].buffer = makeDataBuffer();
+				_oft[_oftCount].writePtr = 0;
+				_oft[_oftCount].readPtr = 0;
+				_oft[_oftCount].filePtr = 0;
+                _oftCount++;
+                updateDirectory();
                 return -1;
             }
             break;
         case MODE_READ_ONLY:
-            i = open(filename, O_RDONLY);
-            if (_result != FS_FILE_NOT_FOUND && i >= 0) {
+            if (_result == FS_OK) {
+				_oft[_oftCount].openMode = mode;
+				_oft[_oftCount].blockSize = _fs->blockSize;
+				_oft[_oftCount].inode = i;
+				inodeBuffer = makeInodeBuffer();
+				loadInode(inodeBuffer, i);
+				_oft[_oftCount].inodeBuffer = inodeBuffer;
+				_oft[_oftCount].buffer = makeDataBuffer();
+				_oft[_oftCount].writePtr = 0;
+				_oft[_oftCount].readPtr = 0;
+				_oft[_oftCount].filePtr = 0;
                 _oftCount++;
+                return _oftCount - 1;
             } else {
                 return -1;
             }
-        case MODE_READ_APPEND:
-            i = open(filename, O_RDWR | O_APPEND);
-            if (_result != FS_FILE_NOT_FOUND && i >= 0) {
-                _oftCount++;
-            } else {
-                return -1;
-            }
-        default:
             break;
+        case MODE_READ_APPEND:
+            if (_result == FS_OK) {
+				_oft[_oftCount].openMode = mode;
+				_oft[_oftCount].blockSize = _fs->blockSize;
+				_oft[_oftCount].inode = i;
+				inodeBuffer = makeInodeBuffer();
+				loadInode(inodeBuffer, i);
+				_oft[_oftCount].inodeBuffer = inodeBuffer;
+				_oft[_oftCount].buffer = makeDataBuffer();
+				_oft[_oftCount].writePtr = 0;
+				_oft[_oftCount].readPtr = 0;
+				_oft[_oftCount].filePtr = getFileLength(filename);
+                _oftCount++;
+                return _oftCount - 1;
+            } else {
+                return -1;
+            }
+            break;
+        default:
+            return -1;
     }
-    
-    unsigned int index = findFile(filename);
-    saveInode(inodeBuffer, index);
-    updateDirectory();
-	return index;
 }
 
 // Write data to the file. File must be opened in MODE_NORMAL or MODE_CREATE modes. Does nothing
 // if file is opened in MODE_READ_ONLY mode.
 void writeFile(int fp, void *buffer, unsigned int dataSize, unsigned int dataCount)
 {
-    if (_oft->openMode == 2 || _oft->openMode == 3) {
+    if (_oft[fp].openMode == MODE_READ_ONLY) {
         return;
     }
     unsigned long* inodeBuffer = makeInodeBuffer();
@@ -168,7 +205,8 @@ void delFile(const char *filename) {
 
 // Close a file. Flushes all data buffers, updates inode, directory, etc.
 void closeFile(int fp) {
-    
+    free(_oft[fp].buffer);
+    free(_oft[fp].inodeBuffer);
 }
 
 
