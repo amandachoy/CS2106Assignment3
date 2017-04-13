@@ -7,13 +7,16 @@ int main(int ac, char **av)
 		printf("\nUsage: %s <file to delete>\n\n", av[0]);
 		return -1;
 	}
-    initFS("part.dsk", "2106s2");
+	
+    initFS("part.dsk", "cs2106");
     delFile(av[1]);
     if (_result == FS_FILE_NOT_FOUND) {
         printf("FILE NOT FOUND\n");
-    } else {
-        printf("FILE DELETED\n");
-    }
+		exit(-1);
+    } else if (_result != FS_OK) {
+		printf("Unknown Error\n");
+		exit(-1);
+	}
     
 	return 0;
 }
