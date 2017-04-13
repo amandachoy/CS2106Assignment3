@@ -9,14 +9,29 @@ int main(int ac, char **av)
 		return -1;
 	}
 
-    initFS("part.dsk", "2106s2");
-    unsigned int attr = getAttr(av[1]);
-    if (attr >> 2 == 1) {
-        printf("R\n");
-    } else if (attr >> 2 == 0) {
-        printf("W\n");
-    } else if (FS_FILE_NOT_FOUND) {
-        printf("FILE NOT FOUND\n");
-    }
+    initFS("part.dsk", "cs2106");
+    if (_result == FS_ERROR) {
+		printf("Unknown Error\n");
+		exit(-1);
+	}
+	    
+	unsigned int attr = getAttr(av[1]);
+    if (_result == FS_OK) {
+		if(attr & 0x04) {
+			printf("R\n");
+		} else {
+			printf("W\n");
+		}
+	    closeFS();
+	} else if (_result == FS_FILE_NOT_FOUND) {
+		printf("FILE NOT FOUND\n");
+		closeFS();
+        exit(-1);
+	} else {
+		printf("Unknown Error\n");
+		closeFS();
+		exit(-1);
+	}
+	
 	return 0;
 }
